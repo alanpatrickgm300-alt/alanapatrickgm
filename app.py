@@ -2,57 +2,65 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="Dashboard Oficial", layout="wide")
-st.title("📊 Painel de Evolução de Receita (Dados Reais do Excel)")
+st.title("📊 Painel de Evolução de Receita (Dados do Excel)")
 
-# Nome exato do arquivo que você subiu
 NOME_ARQUIVO = "planilha.xlsx - Planilha1.csv"
 
 try:
-    # 1. Lendo o arquivo CSV da planilha
+    # 1. Carrega o arquivo original
     df_original = pd.read_csv(NOME_ARQUIVO)
 
-    # 2. Filtrando apenas a linha onde a coluna 'Conta' é igual a 'Receita'
-    df_receita = df_original[df_original["Conta"] == "Receita"]
+    # Limpeza de espaços nos nomes das colunas e linhas
+    df_original.columns = df_original.columns.str.strip()
+    df_original["Conta"] = df_original["Conta"].astype(str).str.strip()
+
+    # 2. Filtra a linha da Receita
+    df_receita = df_original[df_original["Conta"].str.lower() == "receita"]
 
     if not df_receita.empty:
-        # 3. Identificando as colunas de trimestres (todas exceto os textos iniciais)
+        # 3. Separa apenas as colunas que são os Trimestres
+        colunas_excluir = ["Conta", "Variação Trimestral", "Variação Anual"]
         colunas_trimestres = [
-            c
-            for c in df_original.columns
-            if c not in ["Conta", "Variação Trimestral", "Variação Anual"]
+            c for c in df_original.columns if c not in colunas_excluir
         ]
 
-        # 4. Extraindo os valores dessas colunas
+        # 4. Extrai os valores
         valores = df_receita[colunas_trimestres].values.flatten()
 
-        # 5. Criando um novo DataFrame estruturado para o gráfico
+        # 5. Cria o DataFrame estruturado para o gráfico
         df_final = pd.DataFrame(
             {"Trimestre": colunas_trimestres, "Receita": valores}
         )
 
-        # 6. Convertendo a coluna Receita para número (removendo qualquer texto ou campo vazio)
+        # ⚙️ CORREÇÃO DO BUG: Trata os traços '-' e espaços vazios
+        df_final["Receita"] = df_final["Receita"].astype(str).str.strip()
+        df_final["Receita"] = df_final["Receita"].replace("-", "0")
+
+        # Força a conversão para número puro (Float)
         df_final["Receita"] = pd.to_numeric(
             df_final["Receita"], errors="coerce"
         )
-        df_final = df_final.dropna()
 
-        # 7. Invertendo a ordem para que o gráfico vá do trimestre mais antigo para o mais recente
+        # Remove linhas que porventura tenham ficado inválidas (NaN)
+        df_final = df_final.dropna(subset=["Receita"])
+
+        # Garante que o Trimestre seja exibido como texto no eixo X
+        df_final["Trimestre"] = df_final["Trimestre"].astype(str)
+
+        # 6. Ordena do trimestre mais antigo para o mais recente
         df_final = df_final.iloc[::-1].reset_index(drop=True)
 
-        # 8. Exibindo os resultados no Streamlit
-        st.subheader("📈 Gráfico de Linha Oficial do Excel")
-        st.line_chart(data=df_final, x="Trimestre", y="Receita")
+        # 7. Renderiza os componentes na tela
+        st.subheader("📈 Gráfico de Evolução de Receita")
 
-        st.subheader("📋 Tabela de Dados Estruturados")
+        # Usando o gráfico de área ou linha nativo com dados 100% numéricos agora
+        st.area_chart(data=df_final, x="Trimestre", y="Receita")
+
+        st.subheader("📋 Tabela de Dados Tratados")
         st.dataframe(df_final)
 
     else:
-        st.error(
-            "Não foi possível encontrar a linha com a palavra 'Receita' na coluna 'Conta'."
-        )
+        st.error("A linha 'Receita' não foi encontrada na planilha.")
 
 except Exception as e:
-    st.error(f"Erro ao processar o arquivo: {e}")
-    st.info(
-        f"Certifique-se de que o arquivo '{NOME_ARQUIVO}' está na mesma pasta do seu app.py"
-    )
+    st.error(f"Erro ao processar a planilha: {e}")
